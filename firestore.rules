@@ -1,0 +1,56 @@
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+  	function userExists() {
+      return (exists(/databases/$(database)/documents/Users/$(request.auth.uid)) == true);
+    }
+
+  	function userIsAuthorized() {
+      return (request.auth.uid in get(/databases/$(database)/documents/Users/authorized).data) &&
+      				(get(/databases/$(database)/documents/Users/authorized).data[request.auth.uid] == true);
+    }
+
+    function userIsAdmin() {
+      return (request.auth.uid in get(/databases/$(database)/documents/Users/admin).data) &&
+      			(get(/databases/$(database)/documents/Users/admin).data[request.auth.uid] == true);
+    }
+    
+    function getContrib(id) {
+      return get(/databases/$(database)/documents/Contributions/$(id));
+    }
+    
+    function userIsOwner(doc) {
+      return (doc != null && "owner" in doc.data && request.auth.uid == doc.data.owner);
+    }
+
+  	match /Contributions/{document=**} {
+      allow create: if userExists() && userIsAuthorized();
+    	allow read, write: if userExists() && userIsAuthorized() && (userIsAdmin() || userIsOwner(resource));
+    }
+    
+  	match /Contributions/{contrib}/{sub=**} {
+      allow create: if userExists() && userIsAuthorized();
+    	allow read, write: if userExists() && userIsAuthorized() && (userIsAdmin() || userIsOwner(getContrib(contrib)));
+    }
+
+    match /Users/admin {
+    	allow read;
+      allow write: if userExists() && userIsAdmin();
+    }
+
+    match /Users/authorized {
+    	allow read;
+      allow write: if userExists() && userIsAdmin();
+    }
+
+    match /Users/{uid} {
+      allow read;
+    	allow create, write: if (userIsAdmin() || request.auth.uid == uid);
+    }
+
+    match /Contributions/published {
+      allow read;
+      allow write: if userExists() && userIsAdmin();
+    }
+  }
+}
